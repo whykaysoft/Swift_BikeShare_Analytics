@@ -152,16 +152,31 @@ CREATE TABLE bike_share_yr_1 (
 
 ### Key SQL Queries
 
-**1. Hourly Revenue Analysis**
+**1. Hourly Revenue Analysis and Seasonal Revenue**
 ```sql
-SELECT
-    ride_hour,
-    SUM(rides)              AS total_rides,
-    ROUND(SUM(revenue), 2)  AS total_revenue,
-    ROUND(AVG(revenue), 2)  AS avg_revenue_per_hour
-FROM bike_share_yr_0
-GROUP BY ride_hour
-ORDER BY total_revenue DESC;
+WITH combined_data AS (
+    SELECT * FROM bike_share_yr_0
+    UNION ALL
+    SELECT * FROM bike_share_yr_1
+),
+revenue_calc AS (
+    SELECT cd.*, cd.riders * ct.price AS revenue,
+           cd.riders * ct.price - cd.riders * ct.COGS AS profit
+    FROM combined_data cd
+    LEFT JOIN cost_table ct ON cd.yr = ct.yr
+)
+SELECT * FROM revenue_calc;
+, seasonal_summary AS (
+    SELECT 
+        CASE season WHEN 1 THEN 'Winter' WHEN 2 THEN 'Spring'
+                    WHEN 3 THEN 'Summer' WHEN 4 THEN 'Fall' END AS season_name,
+        SUM(revenue) AS total_revenue,
+        LAG(SUM(revenue)) OVER (ORDER BY season) AS prev_season_revenue,
+        ROUND(100.0 * (SUM(revenue) - LAG(SUM(revenue)) OVER (ORDER BY season))
+              / LAG(SUM(revenue)) OVER (ORDER BY season), 2) AS growth_pct
+    FROM revenue_calc
+    GROUP BY season
+)
 ```
 
 **2. Profit and Revenue Trends Over Time**
@@ -177,23 +192,6 @@ SELECT
 FROM bike_share_yr_1
 GROUP BY YEAR(ride_date), MONTH(ride_date)
 ORDER BY year, month;
-```
-
-**3. Seasonal Revenue**
-```sql
-SELECT
-    CASE season
-        WHEN 1 THEN 'Spring'
-        WHEN 2 THEN 'Summer'
-        WHEN 3 THEN 'Fall'
-        WHEN 4 THEN 'Winter'
-    END                         AS season_name,
-    SUM(rides)                  AS total_rides,
-    ROUND(SUM(revenue), 2)      AS total_revenue,
-    ROUND(SUM(profit), 2)       AS total_profit
-FROM cost_table
-GROUP BY season
-ORDER BY total_revenue DESC;
 ```
 
 **4. Rider Demographics**
